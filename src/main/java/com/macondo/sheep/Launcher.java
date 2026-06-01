@@ -1,22 +1,22 @@
 package com.macondo.sheep;
 
+import com.macondo.sheep.controller.GameController;
+import com.macondo.sheep.view.GameView;
 import javafx.application.Application;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
 public class Launcher extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        Label title = new Label("Sheep A Sheep");
-        title.setStyle("-fx-font-size: 36px; -fx-font-weight: bold;");
+        GameController controller = new GameController();
+        controller.loadLevel(1);
 
-        StackPane root = new StackPane(title);
-        Scene scene = new Scene(root, 900, 700);
+        GameView gameView = new GameView(controller);
+        Scene scene = new Scene(gameView.getRoot(), 900, 700);
 
-        primaryStage.setTitle("🐏 Sheep A Sheep");
+        primaryStage.setTitle("Sheep Stack");
         primaryStage.setScene(scene);
         primaryStage.setResizable(false);
         primaryStage.show();
@@ -26,3 +26,4 @@ public class Launcher extends Application {
         launch(args);
     }
 }
+

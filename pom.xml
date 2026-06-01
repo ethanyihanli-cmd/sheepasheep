@@ -12,7 +12,6 @@
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <javafx.version>17.0.6</javafx.version>
     </properties>
 
@@ -32,22 +31,16 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <release>17</release>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>com.macondo.sheep/com.macondo.sheep.Launcher</mainClass>
+                    <mainClass>com.macondo.sheep.Launcher</mainClass>
                 </configuration>
             </plugin>
         </plugins>
     </build>
 </project>
+
+
 
