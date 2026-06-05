@@ -12,10 +12,12 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import java.util.Comparator;
+
 public class GameView {
     private final GameController controller;
     private final BorderPane root;
-    private final GridPane boardPane;
+    private final Pane boardPane;
     private final HBox inventoryPane;
     private final Label scoreLabel;
     private final Label levelLabel;
@@ -23,13 +25,17 @@ public class GameView {
     public GameView(GameController controller) {
         this.controller = controller;
         this.root = new BorderPane();
-        this.boardPane = new GridPane();
+        this.boardPane = new Pane();
         this.inventoryPane = new HBox(10);
         this.scoreLabel = new Label("Score: 0");
         this.levelLabel = new Label("Level 1");
 
         setupUI();
         bindListeners();
+        updateBoard();
+        updateInventory();
+        scoreLabel.setText("Score: " + controller.getGameState().getScore());
+        levelLabel.setText("Level " + controller.getGameState().getCurrentLevel());
     }
 
     private void setupUI() {
@@ -40,24 +46,28 @@ public class GameView {
         topBar.setPadding(new Insets(10));
         topBar.getChildren().addAll(levelLabel, scoreLabel);
 
-        boardPane.setAlignment(Pos.CENTER);
-        boardPane.setHgap(8);
-        boardPane.setVgap(8);
-        boardPane.setPadding(new Insets(20));
+        boardPane.setPrefSize(430, 350);
+        boardPane.setMaxSize(430, 350);
 
         inventoryPane.setAlignment(Pos.CENTER);
         inventoryPane.setPadding(new Insets(10));
-        inventoryPane.setStyle("-fx-background-color: rgba(255,255,255,0.7); " +
-                "-fx-background-radius: 15;");
+        inventoryPane.setStyle("-fx-background-color: rgba(255,255,255,0.7); -fx-background-radius: 15;");
 
         HBox buttonBar = new HBox(15);
         buttonBar.setAlignment(Pos.CENTER);
         buttonBar.setPadding(new Insets(10));
 
         Button restartBtn = new Button("Restart");
-        restartBtn.setOnAction(e -> restartGame());
+        Button undoBtn = new Button("Undo");
+        Button shuffleBtn = new Button("Shuffle");
+        Button removeBtn = new Button("Remove");
 
-        buttonBar.getChildren().addAll(restartBtn);
+        restartBtn.setOnAction(e -> restartGame());
+        undoBtn.setOnAction(e -> controller.undoLastMove());
+        shuffleBtn.setOnAction(e -> controller.shuffleBoard());
+        removeBtn.setOnAction(e -> controller.useRemoveTool());
+
+        buttonBar.getChildren().addAll(restartBtn, undoBtn, shuffleBtn, removeBtn);
 
         VBox centerArea = new VBox(20);
         centerArea.setAlignment(Pos.CENTER);
@@ -71,68 +81,56 @@ public class GameView {
         controller.getGameState().getBoardCards().addListener(
                 (javafx.collections.ListChangeListener.Change<? extends Card> c) -> updateBoard()
         );
-
         controller.getGameState().getInventory().addListener(
                 (javafx.collections.ListChangeListener.Change<? extends Card> c) -> updateInventory()
         );
-
         controller.getGameState().scoreProperty().addListener(
                 (obs, old, newVal) -> scoreLabel.setText("Score: " + newVal)
         );
-
         controller.getGameState().currentLevelProperty().addListener(
                 (obs, old, newVal) -> levelLabel.setText("Level " + newVal)
         );
-
         controller.getGameState().gameWonProperty().addListener(
-                (obs, old, newVal) -> { if (newVal) showMessage("You won!"); }
+                (obs, old, newVal) -> {
+                    if (newVal) showMessage("You won!");
+                }
         );
-
         controller.getGameState().gameLostProperty().addListener(
-                (obs, old, newVal) -> { if (newVal) showMessage("Game over!"); }
+                (obs, old, newVal) -> {
+                    if (newVal) showMessage("Game over!");
+                }
         );
     }
 
     private void updateBoard() {
         boardPane.getChildren().clear();
-
-        int maxLayer = controller.getGameState().getBoardCards().stream()
-                .mapToInt(Card::getLayer)
-                .max().orElse(1);
-
-        for (Card card : controller.getGameState().getBoardCards()) {
+        controller.getGameState().getBoardCards().stream()
+                .sorted(Comparator.comparingInt(Card::getLayer))
+                .forEach(card -> {
             CardNode cardNode = new CardNode(card);
-
-            GridPane.setRowIndex(cardNode, card.getRow());
-            GridPane.setColumnIndex(cardNode, card.getCol());
-
+            cardNode.setLayoutX(card.getX());
+            cardNode.setLayoutY(card.getY());
             cardNode.setOnMouseClicked(e -> {
-                if (card.isSelectable()) {
-                    controller.onCardClicked(card);
-                }
+                if (card.isSelectable()) controller.onCardClicked(card);
             });
-
-            boardPane.add(cardNode, card.getCol(), card.getRow());
-        }
+            boardPane.getChildren().add(cardNode);
+        });
     }
 
     private void updateInventory() {
         inventoryPane.getChildren().clear();
-
         for (int i = 0; i < GameState.INVENTORY_CAPACITY; i++) {
             StackPane slot = new StackPane();
             slot.setPrefSize(70, 90);
             slot.setStyle("-fx-background-color: rgba(255,255,255,0.5); " +
                     "-fx-border-color: #D4A574; -fx-border-width: 2; " +
                     "-fx-border-radius: 10; -fx-background-radius: 10;");
-
             if (i < controller.getGameState().getInventory().size()) {
                 Card card = controller.getGameState().getInventory().get(i);
                 Label cardLabel = new Label(card.getType().getSymbol());
                 cardLabel.setFont(Font.font("System", FontWeight.BOLD, 28));
                 slot.getChildren().add(cardLabel);
             }
-
             inventoryPane.getChildren().add(slot);
         }
     }
@@ -147,9 +145,10 @@ public class GameView {
         VBox overlay = new VBox(msgLabel);
         overlay.setAlignment(Pos.CENTER);
         overlay.setStyle("-fx-background-color: rgba(0,0,0,0.5);");
+        overlay.prefWidthProperty().bind(root.widthProperty());
+        overlay.prefHeightProperty().bind(root.heightProperty());
 
         root.getChildren().add(overlay);
-
         javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.seconds(2));
         pause.setOnFinished(e -> root.getChildren().remove(overlay));
         pause.play();
@@ -163,5 +162,3 @@ public class GameView {
         return root;
     }
 }
-
-

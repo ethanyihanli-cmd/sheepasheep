@@ -2,77 +2,101 @@ package com.macondo.sheep.logic;
 
 import com.macondo.sheep.model.Card;
 import com.macondo.sheep.model.CardType;
+
 import java.util.*;
 
 public class LevelGenerator {
     private static final Random random = new Random();
+    private static final int MATCH_GROUP_SIZE = 3;
+    private static final double CARD_WIDTH = 70;
+    private static final double CARD_HEIGHT = 90;
+    private static final double LEVEL_FIELD_WIDTH = 430;
+    private static final double LEVEL_FIELD_HEIGHT = 350;
+    private static final int LEVEL_1_COLUMNS = 3;
+    private static final double LEVEL_1_X_STEP = 92;
+    private static final double LEVEL_1_Y_STEP = 74;
 
     public static List<Card> generateLevel(int level, List<CardType> selectedTypes) {
-        int layers = (level == 1) ? 3 : 6 + random.nextInt(3);
-        int cardsPerLayer = (level == 1) ? 12 : 20 + random.nextInt(10);
-
-        List<CardType> cardPool = new ArrayList<>();
-        int groupCount = (level == 1) ? 1 : 2 + random.nextInt(3);
-
-        for (CardType type : selectedTypes) {
-            for (int g = 0; g < groupCount; g++) {
-                for (int i = 0; i < 3; i++) {
-                    cardPool.add(type);
-                }
-            }
+        if (selectedTypes == null || selectedTypes.isEmpty()) {
+            throw new IllegalArgumentException("At least one card type is required");
         }
 
-        int totalNeeded = layers * cardsPerLayer;
-        while (cardPool.size() < totalNeeded) {
-            cardPool.add(selectedTypes.get(random.nextInt(selectedTypes.size())));
-        }
-        while (cardPool.size() > totalNeeded) {
-            cardPool.remove(random.nextInt(cardPool.size()));
-        }
-
-        Collections.shuffle(cardPool);
-
-        List<Card> cards = new ArrayList<>();
-        int cardIndex = 0;
-
-        for (int layer = layers; layer >= 1; layer--) {
-            int rowCount = getRowCountForLayer(level, layer, layers);
-            int colCount = getColCountForLayer(level, layer, layers);
-
-            for (int row = 0; row < rowCount && cardIndex < cardPool.size(); row++) {
-                for (int col = 0; col < colCount && cardIndex < cardPool.size(); col++) {
-                    CardType type = cardPool.get(cardIndex++);
-                    Card card = new Card(type, layer, row, col);
-                    cards.add(card);
-                }
-            }
-        }
-
+        List<Card> cards = (level == 1)
+                ? generateOrganizedIntroLevel(selectedTypes)
+                : generateMessyCompactLevel(selectedTypes);
         updateCoveredStatus(cards);
         return cards;
     }
 
-    private static int getRowCountForLayer(int level, int layer, int totalLayers) {
-        if (level == 1) return 3;
-        boolean isBottleneck = (layer > totalLayers / 3 && layer < totalLayers * 2 / 3);
-        return isBottleneck ? 4 + random.nextInt(2) : 6 + random.nextInt(3);
+    private static List<Card> generateOrganizedIntroLevel(List<CardType> selectedTypes) {
+        List<CardType> cardPool = createCardPool(selectedTypes, 18);
+        List<Card> cards = new ArrayList<>();
+        int cardIndex = 0;
+
+        cardIndex = addLevel1Layer(cards, cardPool, cardIndex, 1, 3, 34, 8);
+        cardIndex = addLevel1Layer(cards, cardPool, cardIndex, 2, 2, 74, 52);
+        addLevel1Layer(cards, cardPool, cardIndex, 3, 1, 114, 96);
+        return cards;
     }
 
-    private static int getColCountForLayer(int level, int layer, int totalLayers) {
-        if (level == 1) return 4;
-        boolean isBottleneck = (layer > totalLayers / 3 && layer < totalLayers * 2 / 3);
-        return isBottleneck ? 4 + random.nextInt(2) : 6 + random.nextInt(3);
+    private static int addLevel1Layer(
+            List<Card> cards,
+            List<CardType> cardPool,
+            int cardIndex,
+            int layer,
+            int rows,
+            double startX,
+            double startY
+    ) {
+        for (int row = 0; row < rows && cardIndex < cardPool.size(); row++) {
+            for (int col = 0; col < LEVEL_1_COLUMNS && cardIndex < cardPool.size(); col++) {
+                cards.add(new Card(
+                        cardPool.get(cardIndex++),
+                        layer,
+                        row,
+                        col,
+                        startX + col * LEVEL_1_X_STEP,
+                        startY + row * LEVEL_1_Y_STEP
+                ));
+            }
+        }
+        return cardIndex;
+    }
+
+    private static List<Card> generateMessyCompactLevel(List<CardType> selectedTypes) {
+        int totalCards = 54;
+        int layers = 6;
+        List<CardType> cardPool = createCardPool(selectedTypes, totalCards);
+        List<Card> cards = new ArrayList<>();
+
+        for (int i = 0; i < cardPool.size(); i++) {
+            int layer = 1 + (i % layers);
+            double layerDrift = (layer - 1) * 8;
+            double x = 18 + layerDrift + random.nextDouble(LEVEL_FIELD_WIDTH - CARD_WIDTH - 36);
+            double y = 10 + layerDrift + random.nextDouble(LEVEL_FIELD_HEIGHT - CARD_HEIGHT - 28);
+            cards.add(new Card(cardPool.get(i), layer, i, layer, x, y));
+        }
+        return cards;
+    }
+
+    private static List<CardType> createCardPool(List<CardType> selectedTypes, int totalCards) {
+        List<CardType> cardPool = new ArrayList<>(totalCards);
+        while (cardPool.size() < totalCards) {
+            CardType type = selectedTypes.get(random.nextInt(selectedTypes.size()));
+            for (int i = 0; i < MATCH_GROUP_SIZE; i++) {
+                cardPool.add(type);
+            }
+        }
+        Collections.shuffle(cardPool);
+        return cardPool;
     }
 
     private static void updateCoveredStatus(List<Card> cards) {
         for (Card card : cards) {
             card.setCovered(false);
         }
-
-        for (int i = 0; i < cards.size(); i++) {
-            Card current = cards.get(i);
-            for (int j = 0; j < cards.size(); j++) {
-                Card other = cards.get(j);
+        for (Card current : cards) {
+            for (Card other : cards) {
                 if (other.getLayer() > current.getLayer() && isOverlapping(current, other)) {
                     current.setCovered(true);
                     break;
@@ -82,7 +106,10 @@ public class LevelGenerator {
     }
 
     private static boolean isOverlapping(Card a, Card b) {
-        return Math.abs(a.getRow() - b.getRow()) <= 1 && Math.abs(a.getCol() - b.getCol()) <= 1;
+        return a.getX() < b.getX() + CARD_WIDTH
+                && a.getX() + CARD_WIDTH > b.getX()
+                && a.getY() < b.getY() + CARD_HEIGHT
+                && a.getY() + CARD_HEIGHT > b.getY();
     }
 
     public static List<CardType> getLevel1CardTypes() {
@@ -95,5 +122,3 @@ public class LevelGenerator {
         return types.subList(0, Math.min(types.size(), 10 + random.nextInt(5)));
     }
 }
-
-

@@ -16,7 +16,7 @@ public class Launcher extends Application {
         GameView gameView = new GameView(controller);
         Scene scene = new Scene(gameView.getRoot(), 900, 700);
 
-        primaryStage.setTitle("Sheep Stack");
+        primaryStage.setTitle("🐏 Sheep A Sheep");
         primaryStage.setScene(scene);
         primaryStage.setResizable(false);
         primaryStage.show();

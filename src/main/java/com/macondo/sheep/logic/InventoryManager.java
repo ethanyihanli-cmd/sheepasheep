@@ -33,8 +33,7 @@ public class InventoryManager {
                 return true;
             }
         }
-
-        return false;
+        return true;
     }
 
     private Map<CardType, List<Card>> groupByType(List<Card> cards) {
@@ -58,14 +57,4 @@ public class InventoryManager {
         }
         return true;
     }
-
-    public int getInventorySize() {
-        return gameState.getInventory().size();
-    }
-
-    public int getRemainingCapacity() {
-        return GameState.INVENTORY_CAPACITY - gameState.getInventory().size();
-    }
 }
-
-
