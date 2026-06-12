@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sheep — HTML Demo</title>
+  <style>
+    :root{--card-w:70px;--card-h:90px}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;display:flex;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(to bottom,#87CEEB,#E0F6FF);margin:0}
+    .container{width:520px;padding:16px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .board{position:relative;width:430px;height:350px;background:transparent;border-radius:8px;overflow:hidden;margin:0 auto}
+    .card{width:var(--card-w);height:var(--card-h);position:absolute;border-radius:12px;background:#F5E6D3;border:2px solid #D4A574;display:flex;align-items:center;justify-content:center;font-size:32px;cursor:pointer;user-select:none;transition:transform .12s,box-shadow .12s}
+    .card.covered{filter:grayscale(.2) brightness(.9);}
+    .card.selectable{box-shadow:0 6px 12px rgba(0,0,0,.15);transform:translateY(-6px)}
+    .inventory{display:flex;gap:10px;justify-content:center;margin-top:12px;background:rgba(255,255,255,0.7);padding:10px;border-radius:12px}
+    .slot{width:var(--card-w);height:var(--card-h);background:rgba(255,255,255,0.5);border:2px solid #D4A574;border-radius:10px;display:flex;align-items:center;justify-content:center}
+    .controls{display:flex;gap:10px;justify-content:center;margin-top:10px}
+    button{padding:8px 12px;border-radius:8px;border:none;background:#fff;cursor:pointer}
+    .status{display:flex;gap:10px;align-items:center}
+    .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);color:#fff;font-size:28px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="status"><strong id="level">Level 1</strong><span id="score">Score: 0</span></div>
+      <div>
+        <button id="restart">Restart</button>
+        <button id="undo">Undo</button>
+        <button id="shuffle">Shuffle</button>
+        <button id="remove">Remove</button>
+      </div>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="inventory" id="inventory"></div>
+  </div>
+
+<script>
+// Port of the Java game core logic to a single-file HTML/JS demo
+(() => {
+  const CARD_W = 70, CARD_H = 90;
+  const INVENTORY_CAPACITY = 7;
+  const MATCH_GROUP_SIZE = 3;
+  const level1Cols = 3; const level1Xstep = 92; const level1Ystep = 74;
+
+  const CardTypes = [
+    {id:'CABBAGE',sym:'🥬'}, {id:'CORN',sym:'🌽'}, {id:'MILK',sym:'🥛'}, {id:'CARROT',sym:'🥕'},
+    {id:'BRUSH',sym:'🖌️'}, {id:'BELL',sym:'🔔'}, {id:'GLOVE',sym:'🧤'}, {id:'BUCKET',sym:'🪣'},
+    {id:'YARN',sym:'🧶'}, {id:'SCISSORS',sym:'✂️'}, {id:'SPADE',sym:'🔧'}, {id:'GRASS',sym:'🌿'},
+    {id:'FIRE',sym:'🔥'}, {id:'HAY',sym:'🌾'}, {id:'STUMP',sym:'🪵'}, {id:'WOOL',sym:'🐑'}
+  ];
+
+  const boardEl = document.getElementById('board');
+  const invEl = document.getElementById('inventory');
+  const scoreEl = document.getElementById('score');
+  const levelEl = document.getElementById('level');
+  const restartBtn = document.getElementById('restart');
+  const undoBtn = document.getElementById('undo');
+  const shuffleBtn = document.getElementById('shuffle');
+  const removeBtn = document.getElementById('remove');
+
+  let state = {
+    board: [], // {id, typeIdx, layer,row,col,x,y,covered,selectable,dom}
+    inventory: [],
+    score: 0,
+    level:1,
+    moveHistory: []
+  };
+
+  function randInt(max){return Math.floor(Math.random()*max)}
+
+  function createCardPool(selectedTypes, totalCards){
+    const pool = [];
+    while(pool.length < totalCards){
+      const t = selectedTypes[randInt(selectedTypes.length)];
+      for(let i=0;i<MATCH_GROUP_SIZE;i++) pool.push(t);
+    }
+    // shuffle
+    for(let i=pool.length-1;i>0;i--){const j=randInt(i+1);[pool[i],pool[j]]=[pool[j],pool[i]]}
+    return pool;
+  }
+
+  function generateLevel(level, selectedTypes){
+    if(!selectedTypes || selectedTypes.length===0) throw new Error('need types');
+    if(level===1) return generateOrganizedIntro(selectedTypes);
+    return generateMessy(selectedTypes);
+  }
+
+  function generateOrganizedIntro(selectedTypes){
+    const cardPool = createCardPool(selectedTypes, 18);
+    const cards = [];
+    let idx=0;
+    idx = addLevel1Layer(cards, cardPool, idx,1,3,34,8);
+    idx = addLevel1Layer(cards, cardPool, idx,2,2,74,52);
+    addLevel1Layer(cards, cardPool, idx,3,1,114,96);
+    updateCoveredStatus(cards);
+    return cards;
+  }
+
+  function addLevel1Layer(cards, pool, index, layer, rows, startX,startY){
+    for(let r=0;r<rows && index<pool.length;r++){
+      for(let c=0;c<level1Cols && index<pool.length;c++){
+        cards.push({id:cards.length, typeIdx:pool[index++], layer, row:r, col:c, x:startX + c*level1Xstep, y:startY + r*level1Ystep, covered:false, selectable:false});
+      }
+    }
+    return index;
+  }
+
+  function generateMessy(selectedTypes){
+    const totalCards = 54; const layers = 6; const WIDTH=430, HEIGHT=350;
+    const pool = createCardPool(selectedTypes, totalCards);
+    const cards = [];
+    for(let i=0;i<pool.length;i++){
+      const layer = 1 + (i % layers);
+      const layerDrift = (layer-1)*8;
+      const x = 18 + layerDrift + Math.random()*(WIDTH - CARD_W - 36);
+      const y = 10 + layerDrift + Math.random()*(HEIGHT - CARD_H - 28);
+      cards.push({id:i, typeIdx:pool[i], layer, row:i, col:layer, x,y,covered:false,selectable:false});
+    }
+    updateCoveredStatus(cards);
+    return cards;
+  }
+
+  function updateCoveredStatus(cards){
+    for(const card of cards) card.covered=false;
+    for(const a of cards){
+      for(const b of cards){
+        if(b.layer> a.layer && isOverlapping(a,b)){ a.covered=true; break; }
+      }
+    }
+  }
+
+  function isOverlapping(a,b){
+    return a.x < b.x + CARD_W && a.x + CARD_W > b.x && a.y < b.y + CARD_H && a.y + CARD_H > b.y;
+  }
+
+  function updateSelectableStatus(){
+    updateCoveredStatus(state.board);
+    state.board.forEach(c=>c.selectable=false);
+    state.board.forEach(c=>{ if(!c.covered) c.selectable=true });
+  }
+
+  function render(){
+    // board
+    boardEl.innerHTML='';
+    state.board.sort((a,b)=>a.layer-b.layer).forEach(card=>{
+      const el = document.createElement('div'); el.className='card';
+      el.style.left = card.x+'px'; el.style.top = card.y+'px';
+      el.innerText = CardTypes[card.typeIdx].sym;
+      if(card.covered) el.classList.add('covered');
+      if(card.selectable) el.classList.add('selectable');
+      el.onclick = ()=> onCardClicked(card);
+      card.dom = el;
+      boardEl.appendChild(el);
+    });
+    // inventory
+    invEl.innerHTML='';
+    for(let i=0;i<INVENTORY_CAPACITY;i++){
+      const slot = document.createElement('div'); slot.className='slot';
+      if(i < state.inventory.length){ slot.innerText = CardTypes[state.inventory[i].typeIdx].sym; }
+      invEl.appendChild(slot);
+    }
+    scoreEl.innerText = 'Score: ' + state.score;
+    levelEl.innerText = 'Level ' + state.level;
+  }
+
+  function onCardClicked(card){
+    if(card.selectable===false) return;
+    if(state.gameOver) return;
+    // remove from board
+    const idx = state.board.indexOf(card); if(idx===-1) return;
+    state.board.splice(idx,1);
+    state.moveHistory.push(card);
+    const added = addToInventory(card);
+    if(!added){ // inventory full -> restore and lose
+      state.moveHistory.pop();
+      state.board.push(card);
+      updateSelectableStatus();
+      render();
+      gameLost();
+      return;
+    }
+    updateSelectableStatus();
+    if(state.board.length===0){
+      state.score += 0; // maybe score already updated
+      render();
+      gameWon();
+      return;
+    }
+    if(checkGameLost()){
+      gameLost();
+      return;
+    }
+    render();
+  }
+
+  function addToInventory(card){
+    if(state.inventory.length >= INVENTORY_CAPACITY) return false;
+    state.inventory.push(card);
+    // group by type
+    const groups = {};
+    for(const c of state.inventory){ groups[c.typeIdx] = groups[c.typeIdx] || []; groups[c.typeIdx].push(c); }
+    for(const k in groups){ if(groups[k].length >= MATCH_GROUP_SIZE){ // remove first three
+        const toRemove = groups[k].slice(0,3);
+        state.inventory = state.inventory.filter(c => !toRemove.includes(c));
+        state.score += 10;
+        return true;
+      }}
+    return true;
+  }
+
+  function checkGameLost(){
+    if(state.inventory.length < INVENTORY_CAPACITY) return false;
+    const groups = {};
+    for(const c of state.inventory){ groups[c.typeIdx] = groups[c.typeIdx] || []; groups[c.typeIdx].push(c); }
+    for(const k in groups) if(groups[k].length >= MATCH_GROUP_SIZE) return false;
+    return true;
+  }
+
+  function gameLost(){ state.gameOver = true; showOverlay('Game over!'); }
+  function gameWon(){ state.gameOver = true; showOverlay('You won!'); if(state.level===1) setTimeout(()=>loadLevel(2),1000); }
+
+  function undoLastMove(){ if(state.moveHistory.length===0 || state.gameOver) return; const last = state.moveHistory.pop(); const invIdx = state.inventory.indexOf(last); if(invIdx!==-1){ state.inventory.splice(invIdx,1); state.board.push(last); state.score = Math.max(0, state.score - 10); updateSelectableStatus(); render(); } }
+
+  function shuffleBoard(){ if(state.gameOver) return; for(let i=state.board.length-1;i>0;i--){const j=randInt(i+1);[state.board[i],state.board[j]]=[state.board[j],state.board[i]]} updateSelectableStatus(); render(); }
+
+  function useRemoveTool(){ if(state.gameOver) return; if(state.inventory.length>=3){ state.inventory.splice(0,3); render(); } }
+
+  function showOverlay(msg){ const ov = document.createElement('div'); ov.className='overlay'; ov.innerText = msg; document.querySelector('.container').appendChild(ov); setTimeout(()=>ov.remove(),2000); }
+
+  // level generator helpers
+  function getLevel1Types(){ return [0,1,2]; }
+  function getLevel2Types(){ const indices = [...Array(CardTypes.length).keys()]; for(let i=indices.length-1;i>0;i--){const j=randInt(i+1);[indices[i],indices[j]]=[indices[j],indices[i]]} return indices.slice(0, Math.min(indices.length, 10 + randInt(5))); }
+
+  function loadLevel(level){ state.board = []; state.inventory = []; state.score = state.score; state.moveHistory = []; state.level = level; state.gameOver = false; const types = (level===1) ? getLevel1Types() : getLevel2Types(); const cards = generateLevel(level, types); state.board = cards; updateSelectableStatus(); render(); }
+
+  // wire buttons
+  restartBtn.onclick = ()=>loadLevel(state.level);
+  undoBtn.onclick = ()=>undoLastMove();
+  shuffleBtn.onclick = ()=>shuffleBoard();
+  removeBtn.onclick = ()=>useRemoveTool();
+
+  // start
+  loadLevel(1);
+})();
+</script>
+</body>
+</html>
